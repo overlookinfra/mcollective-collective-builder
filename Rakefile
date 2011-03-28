@@ -71,14 +71,14 @@ def get_members
     Dir.entries("#{BASEDIR}/collective").select{|m| (m[0,1] != "." && m != "base")}
 end
 
-def setup_base(gitrepo, branch)
+def setup_base(gitrepo)
     basedir = "#{BASEDIR}/collective/base"
+    system("git clone -q #{gitrepo} #{basedir}")
+
     FileUtils.mkdir_p basedir
     FileUtils.mkdir_p "pids"
     FileUtils.mkdir_p "logs"
     FileUtils.mkdir_p "client"
-
-    system("git clone -q #{gitrepo} #{basedir} --branch #{branch}")
 end
 
 def get_random_file(type)
@@ -97,7 +97,8 @@ def create_member(collective, identity, stompserver, stompuser, stomppass, stomp
     FileUtils.mkdir_p instance_home
     FileUtils.cd(instance_home)
 
-    system("git clone -q file:///#{clonedir} .")
+    system("git clone -q file:///#{clonedir} cloning")
+    system("mv cloning/* . && mv cloning/.git* . && rmdir cloning")
     system("git checkout -q #{version}")
 
     render_template("#{templatedir}/server.cfg.erb", "#{instance_home}/etc/server.cfg", binding)
@@ -231,22 +232,21 @@ end
 
 desc "Create a new collective member in the collective subdirectory"
 task :create do
-    collective  = ask("Collective Name", "MC_NAME", "mcollectivedev")
+    collective  = ask("Collective Name", "MC_NAME", "mcollective")
     stompserver = ask("Stomp Server", "MC_SERVER", "stomp")
     stompport   = ask("Stomp Port", "MC_PORT", "6163")
     stompssl    = ask("Stomp SSL (y|n)", "MC_SSL", "n")
     stompuser   = ask("Stomp User", "MC_USER", "mcollective")
     stomppass   = ask("Stomp Password", "MC_PASSWORD", "secret")
-    gitrepo     = ask("GIT Source Repository", "MC_SOURCE", "git://github.com/puppetlabs/marionette-collective.git")
-    branch      = ask("Remote branch name", "MC_SOURCE_BRANCH", "master")
-    version     = ask("MCollective Version", "MC_VERSION", branch == "master"? "master" : branch)
+    gitrepo     = ask("GIT Source Repository", "MC_SOURCE", "/opt/puppetlabs/marionette-collective.git")
+    version     = ask("MCollective Version", "MC_VERSION", "1.1.0")
     count       = ask("Instances To Create", "MC_COUNT", 10).to_i
     countstart  = ask("Instance Count Start", "MC_COUNT_START", 0).to_i
-    hostname    = `hostname -f`.chomp
+    hostname    = `hostname`.chomp
 
     # TODO: validate all this stuff
 
-    setup_base(gitrepo, branch)
+    setup_base(gitrepo)
 
     count.times do |i|
         create_member(collective, "#{hostname}-#{countstart + i}", stompserver, stompuser, stomppass, stompport, stompssl, version)
@@ -271,8 +271,7 @@ task :create do
     puts "   MC_NAME=#{collective} MC_SERVER=#{stompserver} MC_USER=#{stompuser} \\"
     puts "   MC_PASSWORD=#{stomppass} MC_PORT=#{stompport} MC_VERSION=#{version} \\"
     puts "   MC_COUNT=#{count} MC_COUNT_START=#{countstart} MC_SSL=#{stompssl} \\"
-    puts "   MC_SOURCE=#{gitrepo} \\"
-    puts "   MC_SOURCE_BRANCH=#{branch} rake create"
+    puts "   MC_SOURCE=#{gitrepo} rake create"
     puts
     puts "The collective instances are stored in collective/* and a client is setup in client/"
     puts
